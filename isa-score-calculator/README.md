@@ -78,6 +78,4 @@ Regardless of platform, remember that each execution triggers many OpenRouter re
 - **Phase stalls/failures**: Use the inline error summary plus downloadable log to inspect stack traces, HTTP errors, or specific topic/scenario where the call failed.
 - **Caching issues**: The scenario workbook is cached via `st.cache_data`. If you modify the Excel file, click “Clear cache” in Streamlit’s hamburger menu or restart the app.
 
-## License
-Specify your licensing terms here (e.g., MIT, Apache 2.0). Update this section once you decide on a license.
 

@@ -66,4 +66,7 @@ class Config:
         (28, 30), # PC
     ]
 
+    def get_prompt(self):
+        return self.JUDGE_SYSTEM_PROMPT
+
 config = Config()
