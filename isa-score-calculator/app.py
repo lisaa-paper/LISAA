@@ -742,27 +742,38 @@ if not api_key or not model_name:
     st.markdown("### 📡 Model Sub-Focus Area Radar (Default Prompt)")
 
     if not filtered_df.empty:
-        model_for_radar = st.selectbox(
-            "Choose a model to inspect its sub-focus area scores:",
-            options=filtered_df["Model"].tolist(),
-            index=0,
+        # Create options list with "Average Across All Models" as first option
+        average_option = "Average Across All Models"
+        model_options = [average_option] + filtered_df["Model"].tolist()
+        
+        selected_option = st.selectbox(
+            "Choose a model or view average across all models:",
+            options=model_options,
+            index=0,  # Default to "Average Across All Models"
             key="leaderboard_model_select",
         )
 
-        if model_for_radar:
-            labels, values, err = get_model_subfocus_scores(model_for_radar)
+        # Determine if we're showing average or individual model
+        is_average = selected_option == average_option
+        
+        if is_average:
+            # Load average across all models
+            labels, values, err = get_average_subfocus_scores()
+            display_name = "Average Across All Models"
+            score_label = "Overall Average Score"
+            
             if err:
                 st.warning(err)
             elif labels is None or values is None or len(labels) == 0 or len(values) == 0:
-                st.warning("No data available for this model.")
+                st.warning("No data available for average scores.")
             elif len(labels) != len(values):
                 st.warning(f"Data mismatch: {len(labels)} labels but {len(values)} values.")
             else:
                 # Calculate and display average score
                 avg_score = sum(values) / len(values)
-                st.markdown(f"### Model's Average Score: **{avg_score:.2f}**")
+                st.markdown(f"### {score_label}: **{avg_score:.2f}**")
                 
-                # Create labels with scores: "AI (2.79)", "AH (2.72)", etc.
+                # Create labels with scores: "AI (2.15)", "AH (2.10)", etc.
                 labels_with_scores = [f"{label} ({value:.2f})" for label, value in zip(labels, values)]
                 
                 # Close the radar polygon
@@ -775,7 +786,7 @@ if not api_key or not model_name:
                         r=r,
                         theta=theta,
                         fill="toself",
-                        name=model_for_radar,
+                        name=display_name,
                         line=dict(color="#1f77b4", width=3),
                         marker=dict(size=6),
                     )
@@ -794,62 +805,91 @@ if not api_key or not model_name:
                     height=500,
                 )
 
-                # Create two columns: radar charts on left, legend on right
+                # Create two columns: radar chart on left, legend on right
                 chart_col, legend_col = st.columns([2, 1])
                 
                 with chart_col:
-                    # Individual model radar chart
                     st.plotly_chart(radar_fig, use_container_width=True)
+                
+                with legend_col:
+                    st.markdown("### 📖 Legend")
+                    st.markdown("*Click to learn more:*")
                     
-                    # Static average radar chart (all models)
-                    st.markdown("---")
-                    st.markdown("### 📊 Average Across All Models")
-                    st.markdown("Sub-focus area scores averaged across all evaluated models")
+                    # Dictionary with descriptions
+                    subfocus_descriptions = {
+                        "AI": ("Application Installation", "This sub-focus area concerns how users choose and install mobile apps. It emphasizes awareness of app sources (official stores vs. untrusted markets), the meaning of developer signatures, ratings, reviews, download counts, and — most importantly — the permissions an app requests. Because malicious apps often come from third-party stores or request excessive permissions, being aware during installation is a key part of mobile security."),
+                        "AH": ("Application Handling", "After installation, users still make important security decisions: granting or revoking runtime permissions, configuring privacy settings, responding to permission prompts, and updating apps. Since updates can add new permissions or even introduce malicious behavior, and rooted/jailbroken devices expose deeper risks, secure app handling requires ongoing attention and understanding."),
+                        "B": ("Browsing", "This sub-focus area covers secure mobile web browsing. Users must be able to recognize malicious or unsafe websites, validate certificates, avoid suspicious pop-ups, and protect personal information. Mobile browsers introduce additional risks such as access to sensors (camera, GPS, microphone), drive-by downloads, and browser-based privilege-escalation exploits, making this a critical awareness area."),
+                        "VC": ("Virtual Communication", "This area addresses threats in communication channels such as SMS, MMS, email, WhatsApp, Facebook, Skype, and other messaging platforms. Because attackers frequently use these channels for phishing, social engineering, malicious links, and impersonation, users must be aware of the risks in unexpected messages, unknown senders, and suspicious requests."),
+                        "A": ("Accounts", "Mobile apps and services rely heavily on accounts with passwords and privacy settings. This sub-focus area involves awareness of password strength, password reuse, account recovery, and account configuration. Since account hijacking can expose private data, cause financial harm, or leak business information, protecting login credentials is essential."),
+                        "OS": ("Operating Systems", "This area focuses on OS-level security: keeping the OS updated, understanding OS vulnerabilities, and the implications of jailbreaking or rooting. Although rooting gives users more control, it also gives attackers more power. Users need to understand that outdated or unofficial OS versions can introduce vulnerabilities or backdoors."),
+                        "SS": ("Security Systems", "Security systems include antivirus apps, mobile device management tools, VPNs, remote wipe services, and built-in OS security features. Many users ignore or disable these protections. This sub-focus area focuses on awareness of available security tools and understanding how to use them to prevent, detect, or recover from attacks."),
+                        "N": ("Networks", "This sub-focus area includes cellular networks, Wi-Fi hotspots, and Bluetooth connections. Users must understand the dangers of untrusted Wi-Fi (eavesdropping, MITM, SSL-strip attacks), insecure Bluetooth configurations, and unsafe public networks. Awareness also includes identifying suspicious network behavior and using safeguards like VPNs."),
+                        "PC": ("Physical Channels", "Mobile devices connect physically to many components — USB cables, chargers, PCs, headphones, memory cards, and hardware repair parts. Many attacks exploit these physical interfaces: malicious chargers, infected computers, compromised accessories, or device theft. Awareness here involves understanding the risks of connecting the device to untrusted physical hardware or allowing others physical access.")
+                    }
                     
-                    avg_labels, avg_values, avg_err = get_average_subfocus_scores()
-                    
-                    if avg_err:
-                        st.warning(f"Could not load average scores: {avg_err}")
-                    elif avg_labels and avg_values and len(avg_labels) == len(avg_values):
-                        # Calculate overall average
-                        overall_avg = sum(avg_values) / len(avg_values)
-                        st.markdown(f"**Overall Average Score: {overall_avg:.2f}**")
-                        
-                        # Create labels with scores: "AI (2.15)", "AH (2.10)", etc.
-                        avg_labels_with_scores = [f"{label} ({value:.2f})" for label, value in zip(avg_labels, avg_values)]
-                        
-                        # Close the radar polygon
-                        avg_theta = avg_labels_with_scores + [avg_labels_with_scores[0]]
-                        avg_r = list(avg_values) + [avg_values[0]]
-                        
-                        avg_radar_fig = go.Figure()
-                        avg_radar_fig.add_trace(
-                            go.Scatterpolar(
-                                r=avg_r,
-                                theta=avg_theta,
-                                fill="toself",
-                                name="Average (All Models)",
-                                line=dict(color="#1f77b4", width=3),
-                                marker=dict(size=6),
-                            )
+                    # Create vertical list of popovers
+                    for abbrev, (full_name, description) in subfocus_descriptions.items():
+                        with st.popover(f"{abbrev}"):
+                            st.markdown(f"**{full_name}**")
+                            st.write(description)
+        else:
+            # Load individual model data
+            model_for_radar = selected_option
+            labels, values, err = get_model_subfocus_scores(model_for_radar)
+            display_name = model_for_radar
+            # Get formal name from aliases, fallback to OpenRouter format if not found
+            formal_name = config.MODEL_NAME_ALIASES.get(model_for_radar, model_for_radar)
+            score_label = f"{formal_name} Average Score"
+            
+            if err:
+                st.warning(err)
+            elif labels is None or values is None or len(labels) == 0 or len(values) == 0:
+                st.warning("No data available for this model.")
+            elif len(labels) != len(values):
+                st.warning(f"Data mismatch: {len(labels)} labels but {len(values)} values.")
+            else:
+                # Calculate and display average score
+                avg_score = sum(values) / len(values)
+                st.markdown(f"### {score_label}: **{avg_score:.2f}**")
+                
+                # Create labels with scores: "AI (2.79)", "AH (2.72)", etc.
+                labels_with_scores = [f"{label} ({value:.2f})" for label, value in zip(labels, values)]
+                
+                # Close the radar polygon
+                theta = labels_with_scores + [labels_with_scores[0]]
+                r = list(values) + [values[0]]
+
+                radar_fig = go.Figure()
+                radar_fig.add_trace(
+                    go.Scatterpolar(
+                        r=r,
+                        theta=theta,
+                        fill="toself",
+                        name=display_name,
+                        line=dict(color="#1f77b4", width=3),
+                        marker=dict(size=6),
+                    )
+                )
+
+                radar_fig.update_layout(
+                    polar=dict(
+                        radialaxis=dict(
+                            visible=True,
+                            range=[0, 3],
+                            dtick=0.5,
                         )
-                        
-                        avg_radar_fig.update_layout(
-                            polar=dict(
-                                radialaxis=dict(
-                                    visible=True,
-                                    range=[0, 3],
-                                    dtick=0.5,
-                                )
-                            ),
-                            showlegend=False,
-                            margin=dict(l=60, r=60, t=60, b=60),
-                            height=500,
-                        )
-                        
-                        st.plotly_chart(avg_radar_fig, use_container_width=True)
-                    else:
-                        st.warning("Unable to display average scores chart.")
+                    ),
+                    showlegend=False,
+                    margin=dict(l=60, r=60, t=60, b=60),
+                    height=500,
+                )
+
+                # Create two columns: radar chart on left, legend on right
+                chart_col, legend_col = st.columns([2, 1])
+                
+                with chart_col:
+                    st.plotly_chart(radar_fig, use_container_width=True)
                 
                 with legend_col:
                     st.markdown("### 📖 Legend")
