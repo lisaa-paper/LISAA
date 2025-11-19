@@ -98,22 +98,9 @@ class Config:
 }
 
     # Path to sub-focus area scores file
-    SUBFOCUS_SCORES_FILE = os.path.join(DATA_DIR, 'sub_focus_area_scores_no_system_prompt_v2.xlsx')
+    # SUBFOCUS_SCORES_FILE = os.path.join(DATA_DIR, 'sub_focus_area_scores_no_system_prompt_v2.xlsx')
+    SUBFOCUS_SCORES_FILE = "Data/sub_focus_area_scores_no_system_prompt_v2.xlsx"
 
-
-    # API Settings
-    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-    
-    # Model Settings
-    MODEL_TEMPERATURE = 0.00001
-    JUDGE_TEMPERATURE = 0.00001
-    MAX_TOKENS = 4000
-    MODEL_VALIDATION_PROMPT = (
-        "ISA Score Calculator connectivity test. Reply with OK to confirm availability."
-    )
-    
-    # Delay Settings
-    DELAY_BETWEEN_REQUESTS = 1  # seconds
     
     # Judge Models (easy to change)
     JUDGE_MODELS = [
