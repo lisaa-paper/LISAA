@@ -172,17 +172,4 @@ Scores are aggregated using majority voting from multiple judge models, then ave
 - See `isa-score-calculator/requirements.txt` for full list
 - Streamlit, OpenAI SDK, pandas, openpyxl, plotly
 
-## License
-
-[Add your license information here]
-
-## Citation
-
-If you use this framework in your research, please cite:
-
-[Add citation information here]
-
-## Contact
-
-[Add contact information here]
 
