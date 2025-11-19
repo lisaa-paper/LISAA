@@ -77,9 +77,9 @@ The **`main_v2.ipynb`** notebook is the primary entry point for running the comp
 - **Part 4:** Score calculation, aggregation, and statistical analysis
 - **Part 5:** Generation of detailed analysis reports and visualizations
 
-## Datasets Folder
+## Initial Datasets Folder
 
-The **`Datasets/`** folder contains the **initial datasets** required to start the experiment:
+The **`Initial Datasets/`** folder contains the **initial datasets** required to start the experiment:
 
 - **`Criterinos and 100 Scenarios.xlsx`**: The core dataset containing all 30 criteria and their associated scenarios (2-5 scenarios per criterion). This file defines the security awareness framework being tested.
 
@@ -89,9 +89,9 @@ The **`Datasets/`** folder contains the **initial datasets** required to start t
 
 These files are the starting point for the experiment and are not modified during execution.
 
-## Data Folder
+## Generated Datasets Folder
 
-The **`Data/`** folder contains **all generated datasets** created during the experiment execution. This includes:
+The **`Generated Datasets/`** folder contains **all generated datasets** created during the experiment execution. This includes:
 
 - **Model responses**: `model_responses_to_scenarios_*.xlsx` - Raw responses from each LLM model under different prompt conditions
 - **Judge evaluations**: `judge_evaluations_results.csv` and `judge_tags_*.xlsx` - Scores and tags assigned by judge models

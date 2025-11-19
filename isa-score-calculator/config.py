@@ -97,9 +97,10 @@ class Config:
         "xai/grok-3": "Grok-3",
 }
 
-    # Path to sub-focus area scores file
-    # SUBFOCUS_SCORES_FILE = os.path.join(DATA_DIR, 'sub_focus_area_scores_no_system_prompt_v2.xlsx')
-    SUBFOCUS_SCORES_FILE = "Data/sub_focus_area_scores_no_system_prompt_v2.xlsx"
+    # Path to sub-focus area scores file (from Generated Datasets folder)
+    SUBFOCUS_SCORES_FILE = os.path.abspath(
+        os.path.join(BASE_DIR, "..", "Generated Datasets", "sub_focus_area_scores_no_system_prompt_v2.xlsx")
+    )
 
     
     # Judge Models (easy to change)

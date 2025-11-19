@@ -11,6 +11,9 @@ from utils.scenario_loader import load_scenarios, get_scenarios_by_category
 from utils.model_validator import validate_models
 from config import config
 import traceback
+import os
+from datetime import datetime
+import json
 
 # Page configuration
 st.set_page_config(
@@ -19,6 +22,50 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Hidden logging system (admin only)
+def log_visit():
+    """Log website visit to a hidden log file. Only accessible by admin."""
+    try:
+        log_file = os.path.join(os.path.dirname(__file__), "..", "visit_log.jsonl")
+        log_file = os.path.abspath(log_file)
+        
+        # Get visit information
+        # Note: Streamlit doesn't directly expose request headers in public API
+        # This logs what information is available
+        visit_data = {
+            "timestamp": datetime.now().isoformat(),
+            "session_id": st.session_state.get("session_id", None),
+            "page": "ISA Score Calculator",
+        }
+        
+        # Try to get additional context if available
+        try:
+            from streamlit.runtime.scriptrunner import get_script_run_ctx
+            ctx = get_script_run_ctx()
+            if ctx and hasattr(ctx, 'session_id'):
+                visit_data["streamlit_session_id"] = str(ctx.session_id)
+            if ctx and hasattr(ctx, 'user_info'):
+                visit_data["user_info"] = str(ctx.user_info)
+        except Exception:
+            pass
+        
+        # Append to log file (JSONL format)
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(visit_data) + "\n")
+    except Exception:
+        # Silently fail - don't interrupt user experience
+        pass
+
+# Initialize session ID if not exists
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(datetime.now().timestamp())
+
+# Log visit on page load
+if "visit_logged" not in st.session_state:
+    log_visit()
+    st.session_state.visit_logged = True
 
 
 RECOMMENDED_JUDGE_MODELS = [
@@ -253,6 +300,66 @@ def get_model_subfocus_scores(selected_model: str):
         
     except Exception as e:
         return None, None, f"Error processing scores: {str(e)}"
+
+
+def get_average_subfocus_scores():
+    """
+    Calculate the average across all models for each sub-focus area.
+    Returns (labels, values) for the radar chart showing average across all models.
+    """
+    df = load_subfocus_scores()
+    if df is None or df.empty:
+        return None, None, "Sub-focus scores file is empty or could not be loaded."
+    
+    # Get the abbreviations column (first column)
+    abbrev_col = df.columns[0]  # Should be 'Unnamed: 0' or similar
+    
+    # Filter out the "Average per Model" row and any rows with NaN in the abbreviation column
+    df_filtered = df[df[abbrev_col] != 'Average per Model'].copy()
+    df_filtered = df_filtered[df_filtered[abbrev_col].notna()].copy()
+    
+    if df_filtered.empty:
+        return None, None, "No valid sub-focus area data found in the Excel file."
+    
+    # Get model columns (exclude metadata columns)
+    model_columns = [col for col in df_filtered.columns 
+                     if col not in [abbrev_col, 'Sub-Focus Area', 'Average per category']]
+    
+    if len(model_columns) == 0:
+        return None, None, "No model columns found in the Excel file."
+    
+    # Calculate average across all models for each sub-focus area (row-wise)
+    labels = df_filtered[abbrev_col].tolist()
+    
+    try:
+        # For each row (sub-focus area), calculate mean across all model columns
+        avg_values = []
+        filtered_labels = []
+        for idx, label in enumerate(labels):
+            row_values = []
+            for col in model_columns:
+                val = df_filtered.iloc[idx][col]
+                if pd.notna(val):
+                    try:
+                        row_values.append(float(val))
+                    except (ValueError, TypeError):
+                        continue
+            
+            if len(row_values) > 0:
+                avg_value = sum(row_values) / len(row_values)
+                avg_values.append(avg_value)
+                filtered_labels.append(str(label))
+        
+        if len(filtered_labels) == 0 or len(avg_values) == 0:
+            return None, None, "No valid average scores could be calculated."
+        
+        if len(filtered_labels) != len(avg_values):
+            return None, None, f"Data mismatch: {len(filtered_labels)} labels but {len(avg_values)} values."
+        
+        return filtered_labels, avg_values, None
+        
+    except Exception as e:
+        return None, None, f"Error calculating average scores: {str(e)}"
 
 # Initialize session state
 if 'step' not in st.session_state:
@@ -528,6 +635,9 @@ if not api_key or not model_name:
                 avg_score = sum(values) / len(values)
                 st.markdown(f"### Average Score: **{avg_score:.2f}**")
                 
+                # Get average across all models
+                avg_labels, avg_values, avg_err = get_average_subfocus_scores()
+                
                 # Create labels with scores: "AI (2.79)", "AH (2.72)", etc.
                 labels_with_scores = [f"{label} ({value:.2f})" for label, value in zip(labels, values)]
                 
@@ -536,6 +646,8 @@ if not api_key or not model_name:
                 r = list(values) + [values[0]]
 
                 radar_fig = go.Figure()
+                
+                # Add selected model trace
                 radar_fig.add_trace(
                     go.Scatterpolar(
                         r=r,
@@ -546,6 +658,30 @@ if not api_key or not model_name:
                         marker=dict(size=6),
                     )
                 )
+                
+                # Add average across all models trace
+                if avg_labels and avg_values and len(avg_labels) == len(avg_values):
+                    # Match labels order with model labels
+                    if set(avg_labels) == set(labels):
+                        # Reorder avg_values to match labels order
+                        avg_dict = dict(zip(avg_labels, avg_values))
+                        avg_ordered = [avg_dict.get(label, 0) for label in labels]
+                        
+                        # Create labels for average trace
+                        avg_labels_with_scores = [f"{label} ({val:.2f})" for label, val in zip(labels, avg_ordered)]
+                        avg_theta = avg_labels_with_scores + [avg_labels_with_scores[0]]
+                        avg_r = avg_ordered + [avg_ordered[0]]
+                        
+                        radar_fig.add_trace(
+                            go.Scatterpolar(
+                                r=avg_r,
+                                theta=avg_theta,
+                                fill="toself",
+                                name="Average (All Models)",
+                                line=dict(color="#ff7f0e", width=2, dash="dash"),
+                                marker=dict(size=5),
+                            )
+                        )
 
                 radar_fig.update_layout(
                     polar=dict(
@@ -555,7 +691,14 @@ if not api_key or not model_name:
                             dtick=0.5,
                         )
                     ),
-                    showlegend=False,
+                    showlegend=True,
+                    legend=dict(
+                        orientation="v",
+                        yanchor="top",
+                        y=1,
+                        xanchor="left",
+                        x=1.05
+                    ),
                     margin=dict(l=60, r=60, t=60, b=60),
                     height=500,
                 )
