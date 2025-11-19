@@ -361,6 +361,101 @@ def get_average_subfocus_scores():
     except Exception as e:
         return None, None, f"Error calculating average scores: {str(e)}"
 
+
+@st.cache_data(show_spinner=False)
+def load_leaderboard_from_excel():
+    """
+    Load leaderboard data from Excel file.
+    Returns DataFrame with Model (OpenRouter format), ISA Score, and all sub-focus area columns.
+    """
+    try:
+        df = load_subfocus_scores()
+        if df is None or df.empty:
+            return None
+        
+        # Get the abbreviations column (first column)
+        abbrev_col = df.columns[0]
+        
+        # Set index to the abbreviation column for easier lookup
+        df_indexed = df.set_index(abbrev_col)
+        
+        # Get model columns (exclude metadata columns)
+        model_columns = [col for col in df_indexed.columns 
+                        if col not in ['Sub-Focus Area', 'Average per category']]
+        
+        if len(model_columns) == 0:
+            return None
+        
+        # Create reverse mapping: formal_name -> openrouter_format
+        reverse_aliases = {formal_name: openrouter_format 
+                          for openrouter_format, formal_name in config.MODEL_NAME_ALIASES.items()}
+        
+        # Build leaderboard data
+        leaderboard_data = []
+        
+        # Get ISA scores from "Average per Model" row
+        if 'Average per Model' not in df_indexed.index:
+            return None
+        
+        avg_row = df_indexed.loc['Average per Model']
+        
+        # Get sub-focus area scores for each model
+        subfocus_rows = {}
+        for cat in config.CATEGORIES:
+            if cat in df_indexed.index:
+                subfocus_rows[cat] = df_indexed.loc[cat]
+        
+        # Process each model column
+        for formal_name in model_columns:
+            # Get OpenRouter format (default to formal_name if not found in mapping)
+            openrouter_format = reverse_aliases.get(formal_name, formal_name)
+            
+            # Get ISA score from "Average per Model" row
+            isa_score = avg_row.get(formal_name)
+            if pd.isna(isa_score):
+                continue
+            
+            try:
+                isa_score = float(isa_score)
+            except (ValueError, TypeError):
+                continue
+            
+            # Get sub-focus area scores
+            model_data = {
+                'Model': openrouter_format,
+                'ISA Score': isa_score,
+            }
+            
+            # Add each sub-focus area score
+            for cat in config.CATEGORIES:
+                if cat in subfocus_rows:
+                    cat_score = subfocus_rows[cat].get(formal_name)
+                    if pd.notna(cat_score):
+                        try:
+                            model_data[cat] = float(cat_score)
+                        except (ValueError, TypeError):
+                            model_data[cat] = np.nan
+                    else:
+                        model_data[cat] = np.nan
+                else:
+                    model_data[cat] = np.nan
+            
+            leaderboard_data.append(model_data)
+        
+        if len(leaderboard_data) == 0:
+            return None
+        
+        leaderboard_df = pd.DataFrame(leaderboard_data)
+        
+        # Sort by ISA Score descending
+        leaderboard_df = leaderboard_df.sort_values('ISA Score', ascending=False).reset_index(drop=True)
+        
+        return leaderboard_df
+        
+    except Exception as e:
+        st.error(f"Failed to load leaderboard from Excel: {e}")
+        return None
+
 # Initialize session state
 if 'step' not in st.session_state:
     st.session_state.step = 0
@@ -515,13 +610,21 @@ if not api_key or not model_name:
     # Model Leaderboard
     st.markdown("---")
     st.header("🏆 ISA Score Leaderboard")
-    st.markdown("Benchmark results for 63 LLM models on Information Security Awareness")
+    st.markdown("Benchmark results for LLM models on Information Security Awareness")
     
-    # Convert to DataFrame
-    leaderboard_df = pd.DataFrame(MODEL_LEADERBOARD)
+    # Load leaderboard from Excel file
+    leaderboard_df = load_leaderboard_from_excel()
+    
+    if leaderboard_df is None or leaderboard_df.empty:
+        st.error("Failed to load leaderboard data from Excel file.")
+        # Fallback to hardcoded data
+        leaderboard_df = pd.DataFrame(MODEL_LEADERBOARD)
+        leaderboard_df = leaderboard_df.sort_values('ISA Score', ascending=False).reset_index(drop=True)
+    else:
+        # Add rank based on ISA Score (descending)
+        leaderboard_df = leaderboard_df.sort_values('ISA Score', ascending=False).reset_index(drop=True)
 
-    # Add rank based on ISA Score (descending)
-    leaderboard_df = leaderboard_df.sort_values('ISA Score', ascending=False).reset_index(drop=True)
+    # Add rank column
     leaderboard_df.insert(0, 'Rank', range(1, len(leaderboard_df) + 1))
 
     # Override / derive Category purely from rank into 3 equal tiers
@@ -538,6 +641,24 @@ if not api_key or not model_name:
         else:
             new_categories.append("Low")
     leaderboard_df["Category"] = new_categories
+
+    # Sort option
+    sort_options = ["ISA Score"] + config.CATEGORIES
+    sort_by = st.selectbox(
+        "Sort by:",
+        options=sort_options,
+        index=0,
+        key="leaderboard_sort"
+    )
+    
+    # Apply sorting
+    if sort_by == "ISA Score":
+        leaderboard_df = leaderboard_df.sort_values('ISA Score', ascending=False).reset_index(drop=True)
+    elif sort_by in config.CATEGORIES:
+        leaderboard_df = leaderboard_df.sort_values(sort_by, ascending=False, na_position='last').reset_index(drop=True)
+    
+    # Update rank after sorting
+    leaderboard_df['Rank'] = range(1, len(leaderboard_df) + 1)
 
     # Filters
     col1, col2, col3 = st.columns(3)
@@ -569,7 +690,7 @@ if not api_key or not model_name:
     # Display stats
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total Models", len(MODEL_LEADERBOARD))
+        st.metric("Total Models", len(leaderboard_df))
     with col2:
         avg_score = leaderboard_df['ISA Score'].mean()
         st.metric("Average Score", f"{avg_score:.2f}")
@@ -595,11 +716,17 @@ if not api_key or not model_name:
             font_color = "black"
         return f"background-color: {color}; color: {font_color}; font-weight: bold"
 
-    # Style the dataframe (only Category column is colored)
+    # Format dictionary for all numeric columns
+    format_dict = {'ISA Score': '{:.2f}'}
+    for cat in config.CATEGORIES:
+        if cat in filtered_df.columns:
+            format_dict[cat] = '{:.2f}'
+
+    # Style the dataframe
     styled_df = (
         filtered_df
         .style
-        .format({'ISA Score': '{:.2f}'})
+        .format(format_dict)
         .applymap(category_cell_style, subset=['Category'])
     )
     
@@ -633,10 +760,7 @@ if not api_key or not model_name:
             else:
                 # Calculate and display average score
                 avg_score = sum(values) / len(values)
-                st.markdown(f"### Average Score: **{avg_score:.2f}**")
-                
-                # Get average across all models
-                avg_labels, avg_values, avg_err = get_average_subfocus_scores()
+                st.markdown(f"### Model's Average Score: **{avg_score:.2f}**")
                 
                 # Create labels with scores: "AI (2.79)", "AH (2.72)", etc.
                 labels_with_scores = [f"{label} ({value:.2f})" for label, value in zip(labels, values)]
@@ -646,8 +770,6 @@ if not api_key or not model_name:
                 r = list(values) + [values[0]]
 
                 radar_fig = go.Figure()
-                
-                # Add selected model trace
                 radar_fig.add_trace(
                     go.Scatterpolar(
                         r=r,
@@ -658,30 +780,6 @@ if not api_key or not model_name:
                         marker=dict(size=6),
                     )
                 )
-                
-                # Add average across all models trace
-                if avg_labels and avg_values and len(avg_labels) == len(avg_values):
-                    # Match labels order with model labels
-                    if set(avg_labels) == set(labels):
-                        # Reorder avg_values to match labels order
-                        avg_dict = dict(zip(avg_labels, avg_values))
-                        avg_ordered = [avg_dict.get(label, 0) for label in labels]
-                        
-                        # Create labels for average trace
-                        avg_labels_with_scores = [f"{label} ({val:.2f})" for label, val in zip(labels, avg_ordered)]
-                        avg_theta = avg_labels_with_scores + [avg_labels_with_scores[0]]
-                        avg_r = avg_ordered + [avg_ordered[0]]
-                        
-                        radar_fig.add_trace(
-                            go.Scatterpolar(
-                                r=avg_r,
-                                theta=avg_theta,
-                                fill="toself",
-                                name="Average (All Models)",
-                                line=dict(color="#ff7f0e", width=2, dash="dash"),
-                                marker=dict(size=5),
-                            )
-                        )
 
                 radar_fig.update_layout(
                     polar=dict(
@@ -691,23 +789,67 @@ if not api_key or not model_name:
                             dtick=0.5,
                         )
                     ),
-                    showlegend=True,
-                    legend=dict(
-                        orientation="v",
-                        yanchor="top",
-                        y=1,
-                        xanchor="left",
-                        x=1.05
-                    ),
+                    showlegend=False,
                     margin=dict(l=60, r=60, t=60, b=60),
                     height=500,
                 )
 
-                # Create two columns: radar chart on left, legend on right
+                # Create two columns: radar charts on left, legend on right
                 chart_col, legend_col = st.columns([2, 1])
                 
                 with chart_col:
+                    # Individual model radar chart
                     st.plotly_chart(radar_fig, use_container_width=True)
+                    
+                    # Static average radar chart (all models)
+                    st.markdown("---")
+                    st.markdown("### 📊 Average Across All Models")
+                    st.markdown("Sub-focus area scores averaged across all evaluated models")
+                    
+                    avg_labels, avg_values, avg_err = get_average_subfocus_scores()
+                    
+                    if avg_err:
+                        st.warning(f"Could not load average scores: {avg_err}")
+                    elif avg_labels and avg_values and len(avg_labels) == len(avg_values):
+                        # Calculate overall average
+                        overall_avg = sum(avg_values) / len(avg_values)
+                        st.markdown(f"**Overall Average Score: {overall_avg:.2f}**")
+                        
+                        # Create labels with scores: "AI (2.15)", "AH (2.10)", etc.
+                        avg_labels_with_scores = [f"{label} ({value:.2f})" for label, value in zip(avg_labels, avg_values)]
+                        
+                        # Close the radar polygon
+                        avg_theta = avg_labels_with_scores + [avg_labels_with_scores[0]]
+                        avg_r = list(avg_values) + [avg_values[0]]
+                        
+                        avg_radar_fig = go.Figure()
+                        avg_radar_fig.add_trace(
+                            go.Scatterpolar(
+                                r=avg_r,
+                                theta=avg_theta,
+                                fill="toself",
+                                name="Average (All Models)",
+                                line=dict(color="#1f77b4", width=3),
+                                marker=dict(size=6),
+                            )
+                        )
+                        
+                        avg_radar_fig.update_layout(
+                            polar=dict(
+                                radialaxis=dict(
+                                    visible=True,
+                                    range=[0, 3],
+                                    dtick=0.5,
+                                )
+                            ),
+                            showlegend=False,
+                            margin=dict(l=60, r=60, t=60, b=60),
+                            height=500,
+                        )
+                        
+                        st.plotly_chart(avg_radar_fig, use_container_width=True)
+                    else:
+                        st.warning("Unable to display average scores chart.")
                 
                 with legend_col:
                     st.markdown("### 📖 Legend")
