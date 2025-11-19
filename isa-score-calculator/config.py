@@ -7,12 +7,6 @@ class Config:
     DATA_DIR = os.path.join(BASE_DIR, 'data')
     SCENARIOS_FILE = os.path.join(DATA_DIR, 'Criterinos and 150 Draft Scenarios.xlsx')
 
-    # Sub-focus area scores (default prompt, for leaderboard radar charts)
-    # This Excel file lives in the project-level Data folder, next to `isa-score-calculator`.
-    SUBFOCUS_SCORES_FILE = os.path.abspath(
-        os.path.join(BASE_DIR, "..", "Data", "sub_focus_area_scores_no_system_prompt_v2.xlsx")
-    )
-
     # Mapping from provider/model identifiers (OpenRouter format) to the formal
    # Model name mapping between OpenRouter format and formal names
     MODEL_NAME_ALIASES = {
