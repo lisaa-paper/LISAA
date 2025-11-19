@@ -184,21 +184,6 @@ def _generate_model_name_candidates(model_identifier: str):
 @st.cache_data(show_spinner=False)
 def load_subfocus_scores():
     """
-    Load per-model sub-focus area scores (default prompt only) from Excel.
-
-    The Excel path is configured in `config.SUBFOCUS_SCORES_FILE`.
-    """
-    try:
-        df = pd.read_excel(config.SUBFOCUS_SCORES_FILE)
-        return df
-    except Exception as e:
-        st.error(f"Failed to load sub-focus area scores file:\n{e}")
-        return None
-
-
-@st.cache_data(show_spinner=False)
-def load_subfocus_scores():
-    """
     Load per-model sub-focus area scores from Excel.
     Structure: Rows = sub-focus areas, Columns = models
     """
@@ -234,20 +219,40 @@ def get_model_subfocus_scores(selected_model: str):
     # Get the abbreviations column (first column)
     abbrev_col = df.columns[0]  # Should be 'Unnamed: 0' or similar
     
-    # Filter out the "Average per Model" row
+    # Filter out the "Average per Model" row and any rows with NaN in the abbreviation column
     df_filtered = df[df[abbrev_col] != 'Average per Model'].copy()
+    df_filtered = df_filtered[df_filtered[abbrev_col].notna()].copy()
+    
+    if df_filtered.empty:
+        return None, None, "No valid sub-focus area data found in the Excel file."
     
     # Extract abbreviations and scores
     labels = df_filtered[abbrev_col].tolist()  # ['AI', 'AH', 'B', 'VC', 'A', 'OS', 'SS', 'N', 'PC']
     values = df_filtered[formal_name].tolist()  # Scores for this model
     
-    # Convert to float and handle any potential issues
+    # Filter out any NaN values and convert to float
     try:
-        values = [float(v) for v in values]
-    except (ValueError, TypeError) as e:
-        return None, None, f"Error converting scores to numbers: {e}"
-    
-    return labels, values, None
+        filtered_labels = []
+        filtered_values = []
+        for label, value in zip(labels, values):
+            if pd.notna(value):
+                try:
+                    float_val = float(value)
+                    filtered_labels.append(str(label))
+                    filtered_values.append(float_val)
+                except (ValueError, TypeError):
+                    continue
+        
+        if len(filtered_labels) == 0 or len(filtered_values) == 0:
+            return None, None, f"No valid scores found for model '{formal_name}'."
+        
+        if len(filtered_labels) != len(filtered_values):
+            return None, None, f"Data mismatch: {len(filtered_labels)} labels but {len(filtered_values)} values."
+        
+        return filtered_labels, filtered_values, None
+        
+    except Exception as e:
+        return None, None, f"Error processing scores: {str(e)}"
 
 # Initialize session state
 if 'step' not in st.session_state:
@@ -498,7 +503,8 @@ if not api_key or not model_name:
         hide_index=True,
         height=600
     )
-# Model-specific radar chart (default prompt, sub-focus areas)
+    
+    # Model-specific radar chart (default prompt, sub-focus areas)
     st.markdown("### 📡 Model Sub-Focus Area Radar (Default Prompt)")
 
     if not filtered_df.empty:
@@ -513,6 +519,10 @@ if not api_key or not model_name:
             labels, values, err = get_model_subfocus_scores(model_for_radar)
             if err:
                 st.warning(err)
+            elif labels is None or values is None or len(labels) == 0 or len(values) == 0:
+                st.warning("No data available for this model.")
+            elif len(labels) != len(values):
+                st.warning(f"Data mismatch: {len(labels)} labels but {len(values)} values.")
             else:
                 # Calculate and display average score
                 avg_score = sum(values) / len(values)
