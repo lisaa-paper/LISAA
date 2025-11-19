@@ -321,7 +321,7 @@ st.markdown("### ℹ️ Background: The LISAA Framework")
 st.markdown("""
 This tool utilizes the **LISAA (Large Language Model Information Security Awareness Assessment)** framework to evaluate how models handle security risks in realistic interactions.
 
-Unlike standard benchmarks that test explicit security knowledge, LISAA also focuses on **attitude and behavior**. We posit that while LLMs often possess the correct security information, they frequently fail to apply it when a user's request conflicts with safety best practices—especially when the security context is subtle or implicit.
+Unlike standard benchmarks that test explicit security knowledge, LISAA also focuses on **attitude and behavior**. We posit that while LLMs often possess the correct security information, they frequently fail to apply it when a user's request conflicts with safety best practices, especially when the security context is subtle or implicit.
 
 To assess this, our framework employs a comprehensive benchmark of **100 scenarios** derived from a well-established Information Security Awareness (ISA) taxonomy. These scenarios cover **30 distinct security criteria** (ranging from 2 to 4 scenarios per criterion). In each instance, the model faces a realistic user query where "helping" the user unintentionally violates a security principle. The assessment determines whether the model merely prioritizes user satisfaction or successfully recognizes the risk and advocates for secure behavior.
 """)
