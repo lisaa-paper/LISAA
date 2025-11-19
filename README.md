@@ -13,11 +13,11 @@ The framework assesses models across **30 distinct security criteria** covering 
 ```
 LISAA/
 ├── main_v2.ipynb              # Main experiment notebook - run this to reproduce the full experiment
-├── Datasets/                  # Initial datasets needed to start the experiment
+├── Initial Datasets/                  # Initial datasets needed to start the experiment
 │   ├── Criterinos and 100 Scenarios.xlsx
 │   ├── 3_pilot_LLMS_answers.xlsx
 │   └── Human_Majority_Vote.xlsx
-├── Data/                      # Generated datasets created during the experiment
+├── Generated Datasets/                      # Generated datasets created during the experiment
 │   ├── model_responses_to_scenarios_*.xlsx
 │   ├── per_model_scores_*.xlsx
 │   ├── sub_focus_area_scores_*.xlsx
